@@ -19,6 +19,8 @@ __all__ = [
     "get_rep",
 ]
 
+SENSITIVE_PROSPECT_FIELDS = frozenset({"billing_qualification"})
+
 # Built prospect profiles are cached in memory (keyed by prospect_id) so repeat
 # lookups within a run are served without rebuilding.
 _PROFILES = {}
@@ -26,6 +28,19 @@ _PROFILES = {}
 # ---------------------------------------------------------------------------
 # Public data-access functions
 # ---------------------------------------------------------------------------
+def redact_prospect_record(record):
+    "Return a shallow copy of a prospect record without sensitive fields."
+    if record is None:
+        return None
+    return {key: value for key, value in record.items()
+            if key not in SENSITIVE_PROSPECT_FIELDS}
+
+
+def _get_raw_prospect_record(prospect_id):
+    "Return the unredacted source prospect record for internal use."
+    return PROSPECTS.get(prospect_id)
+
+
 def get_offering(offering_id):
     "Return the offering record for offering_id from the CRM, or None if not found."
     return OFFERINGS.get(offering_id)
@@ -33,7 +48,7 @@ def get_offering(offering_id):
 
 def get_prospect_record(prospect_id):
     "Return the source prospect record for prospect_id, or None if not found."
-    return PROSPECTS.get(prospect_id)
+    return redact_prospect_record(_get_raw_prospect_record(prospect_id))
 
 
 def get_rep(rep):
@@ -47,17 +62,17 @@ def get_rep(rep):
 
 @traceable(run_type="tool", name="fetch_engagement_history")
 def fetch_engagement_history(prospect_id):
-    return PROSPECTS[prospect_id]["engagement_history"]
+    return _get_raw_prospect_record(prospect_id)["engagement_history"]
 
 
 @traceable(run_type="tool", name="fetch_account_details")
 def fetch_account_details(prospect_id):
-    return PROSPECTS[prospect_id]["account_details"]
+    return _get_raw_prospect_record(prospect_id)["account_details"]
 
 
 @traceable(run_type="tool", name="fetch_tech_stack")
 def fetch_tech_stack(prospect_id):
-    return PROSPECTS[prospect_id]["tech_stack"]
+    return _get_raw_prospect_record(prospect_id)["tech_stack"]
 
 
 @traceable(run_type="tool", name="get_profile_from_db")
@@ -74,7 +89,7 @@ def save_profile_to_db(prospect_id, profile):
 
 def update_prospect_info(prospect_id, technology):
     "Add a technology to a prospect's source-of-truth record."
-    record = PROSPECTS.get(prospect_id)
+    record = _get_raw_prospect_record(prospect_id)
     if record is None:
         return {"updated": False, "found": False}
     tech_stack = list(record["tech_stack"])
